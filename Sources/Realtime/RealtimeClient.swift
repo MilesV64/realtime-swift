@@ -133,11 +133,8 @@ public class RealtimeClient: TransportDelegate {
   /// Ref counter for messages
   var ref = UInt64.min  // 0 (max: 18,446,744,073,709,551,615)
 
-  /// Queue to run heartbeat timer on
-  var heartbeatQueue = DispatchQueue(label: "com.supabase.realtime.socket.heartbeat")
-
   /// Timer that triggers sending new Heartbeat messages
-  var heartbeatTimer: HeartbeatTimer?
+  private let heartbeatTimer: HeartbeatTimer
 
   /// Ref counter for the last heartbeat that was sent
   var pendingHeartbeatRef: String?
@@ -166,6 +163,8 @@ public class RealtimeClient: TransportDelegate {
     transport = URLSessionTransport(url: endPointUrl)
     self.params = params
     self.endPoint = endPoint
+      
+    self.heartbeatTimer = HeartbeatTimer(timeInterval: self.heartbeatInterval)
 
     reconnectTimer = TimeoutTimer()
     reconnectTimer.callback.delegate(to: self) { (self) in
@@ -182,6 +181,7 @@ public class RealtimeClient: TransportDelegate {
 
   deinit {
     reconnectTimer.reset()
+    print("realtime client deinit")
   }
 
   // ----------------------------------------------------------------------
@@ -247,8 +247,7 @@ public class RealtimeClient: TransportDelegate {
     connection = nil
 
     // The socket connection has been torndown, heartbeats are not needed
-    heartbeatTimer?.stopTimer()
-    heartbeatTimer = nil
+    heartbeatTimer.stopTimer()
 
     // Since the connection's delegate was nil'd out, inform all state
     // callbacks that the connection has closed
@@ -580,8 +579,7 @@ public class RealtimeClient: TransportDelegate {
     triggerChannelError()
 
     // Prevent the heartbeat from triggering if the
-    heartbeatTimer?.stopTimer()
-    heartbeatTimer = nil
+      self.heartbeatTimer.stopTimer()
 
     // Only attempt to reconnect if the socket did not close normally
     if !closeWasClean {
@@ -699,20 +697,19 @@ public class RealtimeClient: TransportDelegate {
   internal func resetHeartbeat() {
     // Clear anything related to the heartbeat
     pendingHeartbeatRef = nil
-    heartbeatTimer?.stopTimer()
-    heartbeatTimer = nil
+    
+    heartbeatTimer.stopTimer()
 
     // Do not start up the heartbeat timer if skipHeartbeat is true
     guard !skipHeartbeat else { return }
 
-    heartbeatTimer = HeartbeatTimer(timeInterval: heartbeatInterval, dispatchQueue: heartbeatQueue)
-    heartbeatTimer?.startTimerWithEvent(eventHandler: { [weak self] in
+    heartbeatTimer.startTimer { [weak self] in
       self?.sendHeartbeat()
-    })
+    }
   }
 
   /// Sends a hearbeat payload to the phoenix serverss
-  @objc func sendHeartbeat() {
+  private func sendHeartbeat() {
     // Do not send if the connection is closed
     guard isConnected else { return }
 

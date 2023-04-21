@@ -209,12 +209,14 @@ public class URLSessionTransport: NSObject, Transport, URLSessionWebSocketDelega
     webSocketTask _: URLSessionWebSocketTask,
     didOpenWithProtocol _: String?
   ) {
-    // The Websocket is connected. Set Transport state to open and inform delegate
-    readyState = .open
-    delegate?.onOpen()
+      DispatchQueue.main.async {
+          // The Websocket is connected. Set Transport state to open and inform delegate
+          self.readyState = .open
+          self.delegate?.onOpen()
 
-    // Start receiving messages
-    receive()
+          // Start receiving messages
+          self.receive()
+      }
   }
 
   public func urlSession(
@@ -223,9 +225,11 @@ public class URLSessionTransport: NSObject, Transport, URLSessionWebSocketDelega
     didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
     reason _: Data?
   ) {
-    // A close frame was received from the server.
-    readyState = .closed
-    delegate?.onClose(code: closeCode.rawValue)
+      DispatchQueue.main.async {
+          // A close frame was received from the server.
+          self.readyState = .closed
+          self.delegate?.onClose(code: closeCode.rawValue)
+      }
   }
 
   public func urlSession(
@@ -236,7 +240,10 @@ public class URLSessionTransport: NSObject, Transport, URLSessionWebSocketDelega
     // The task has terminated. Inform the delegate that the transport has closed abnormally
     // if this was caused by an error.
     guard let err = error else { return }
-    abnormalErrorReceived(err)
+      
+      DispatchQueue.main.async {
+          self.abnormalErrorReceived(err)
+      }
   }
 
   // MARK: - Private
