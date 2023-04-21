@@ -555,14 +555,10 @@ public class RealtimeClient: TransportDelegate {
 
   // ----------------------------------------------------------------------
     
-    public var testCallback: (() -> Void)?
-    
   /// Called when the underlying Websocket connects to it's host
   internal func onConnectionOpen() {
     logItems("transport", "Connected to \(endPoint)")
       
-      self.testCallback?()
-
     // Reset the closeWasClean flag now that the socket has been connected
     closeWasClean = false
 
