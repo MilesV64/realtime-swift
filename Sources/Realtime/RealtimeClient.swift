@@ -120,6 +120,9 @@ public class RealtimeClient: TransportDelegate {
   // MARK: - Private Attributes
 
   // ----------------------------------------------------------------------
+  
+  private let authAdapter: RealtimeAuthAdapter
+  
   /// Callbacks for socket state changes
   var stateChangeCallbacks = StateChangeCallbacks()
 
@@ -155,15 +158,18 @@ public class RealtimeClient: TransportDelegate {
   // ----------------------------------------------------------------------
   public init(
     endPoint: String,
-    params: [String: Any]? = nil
+    params: [String: Any]? = nil,
+    authAdapter: RealtimeAuthAdapter
   ) {
     endPointUrl = RealtimeClient.buildEndpointUrl(
       endpoint: endPoint,
       params: params)
     transport = URLSessionTransport(url: endPointUrl)
+    
     self.params = params
     self.endPoint = endPoint
-      
+    self.authAdapter = authAdapter
+
     self.heartbeatTimer = HeartbeatTimer(timeInterval: self.heartbeatInterval)
 
     reconnectTimer = TimeoutTimer()
@@ -509,11 +515,44 @@ public class RealtimeClient: TransportDelegate {
     ref: String? = nil,
     joinRef: String? = nil
   ) {
+    Task {
+      let accessToken = try? await self.authAdapter.getAccessTokenForRealtimePayload()
+      
+      await MainActor.run {
+        self.performPushWithAccessToken(
+          accessToken: accessToken,
+          topic: topic,
+          event: event,
+          payload: payload,
+          ref: ref,
+          joinRef: joinRef
+        )
+      }
+    }
+  }
+  
+  internal func performPushWithAccessToken(
+    accessToken: String?,
+    topic: ChannelTopic,
+    event: ChannelEvent,
+    payload: [String: Any],
+    ref: String? = nil,
+    joinRef: String? = nil
+  ) {
     let callback: (() throws -> Void) = {
+      
+      let authenticatedPayload = {
+        var payload = payload
+        if let accessToken = accessToken {
+          payload["access_token"] = accessToken
+        }
+        return payload
+      }()
+      
       var body: [String: Any] = [
         "topic": topic.rawValue,
         "event": event.rawValue,
-        "payload": payload,
+        "payload": authenticatedPayload,
       ]
 
       if let safeRef = ref { body["ref"] = safeRef }
@@ -534,6 +573,8 @@ public class RealtimeClient: TransportDelegate {
       sendBuffer.append((ref: ref, callback: callback))
     }
   }
+  
+  
 
   /// - return: the next message ref, accounting for overflows
   public func makeRef() -> String {
