@@ -810,7 +810,9 @@ public class RealtimeClient: TransportDelegate {
 
   public func onClose(code: Int) {
     closeWasClean = code != CloseCode.abnormal.rawValue
-    onConnectionClosed(code: code)
+    DispatchQueue.main.async {
+      self.onConnectionClosed(code: code)
+    }
   }
 }
 
